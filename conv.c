@@ -190,6 +190,7 @@ int main(int argc, char **argv)
     {
       memset(pad_row_lower, 0, DIM * sizeof(int) * num_pads);
     }
+
     memcpy(sub_grid, pad_row_upper, sizeof(int) * DIM * num_pads);
     memcpy(&sub_grid[DIM * num_pads], &main_grid[DIM * start], sizeof(int) * DIM * nrows);
     memcpy(&sub_grid[DIM * (nrows + num_pads)], pad_row_lower, sizeof(int) * DIM * num_pads);

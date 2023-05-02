@@ -130,16 +130,16 @@ int main(int argc, char **argv)
         }
         // Output the updated grid state
         // if ( ID == 0 ) {
-        printf("\nConvolution Output: \n");
-        for (int j = 0; j < GRID_WIDTH; j++)
-        {
-            if (j % DIM == 0)
-            {
-                printf("\n");
-            }
-            printf("%d  ", main_grid[j]);
-        }
-        printf("\n");
+        // printf("\nConvolution Output: \n");
+        // for (int j = 0; j < GRID_WIDTH; j++)
+        // {
+        //     if (j % DIM == 0)
+        //     {
+        //         printf("\n");
+        //     }
+        //     printf("%d  ", main_grid[j]);
+        // }
+        // printf("\n");
         // }
 
         free(changed_subgrid);
