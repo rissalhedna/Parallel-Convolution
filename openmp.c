@@ -26,7 +26,7 @@ void convolve_omp(int *sub_grid, int *new_grid, int nrows, int DIM, int *kernel,
 {
     int num_pads = (kernel_dim - 1) / 2;
 
-    #pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(static)
     for (int i = num_pads * DIM; i < (DIM * (num_pads + nrows)); i++)
     {
         new_grid[i - (num_pads * DIM)] = conv_column(sub_grid, i, nrows, DIM, kernel, kernel_dim);
@@ -36,9 +36,9 @@ void convolve_omp(int *sub_grid, int *new_grid, int nrows, int DIM, int *kernel,
 int *check_omp(int *sub_grid, int nrows, int DIM, int *kernel, int kernel_dim)
 {
     int *new_grid = calloc(DIM * nrows, sizeof(int));
-    
+
     convolve_omp(sub_grid, new_grid, nrows, DIM, kernel, kernel_dim);
-    
+
     return new_grid;
 }
 int main(int argc, char **argv)

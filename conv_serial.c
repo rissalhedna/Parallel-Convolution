@@ -6,6 +6,10 @@
 
 #define DEFAULT_ITERATIONS 1
 
+int conv_column(int *, int, int, int, int *, int);
+int conv(int *, int, int, int, int *, int);
+int *check(int *, int, int, int *, int);
+
 int conv_column(int *sub_grid, int i, int nrows, int DIM, int *kernel, int kernel_dim)
 {
     int counter = 0;
@@ -60,19 +64,22 @@ int *check(int *sub_grid, int nrows, int DIM, int *kernel, int kernel_dim)
     }
     return new_grid;
 }
-
 int main(int argc, char **argv)
 {
-    int num_iterations = DEFAULT_ITERATIONS;
-    int DIM = 0, GRID_WIDTH = 0, KERNEL_DIM = 0, KERNEL_SIZE = 0;
+    int iters = 0;
+    int num_iterations;
+    int DIM;
+    int GRID_WIDTH;
+    int KERNEL_DIM;
+    int KERNEL_SIZE;
 
+    num_iterations = DEFAULT_ITERATIONS;
     if (argc >= 3)
     {
         DIM = atoi(argv[1]);
         GRID_WIDTH = DIM * DIM;
         KERNEL_DIM = atoi(argv[2]);
         KERNEL_SIZE = KERNEL_DIM * KERNEL_DIM;
-
         if (argc == 4)
         {
             num_iterations = atoi(argv[3]);
@@ -80,13 +87,11 @@ int main(int argc, char **argv)
     }
     else
     {
-        printf("Invalid command line arguments\n");
+        printf("Invalid command line arguments");
         exit(-1);
     }
-
     int main_grid[GRID_WIDTH];
     memset(main_grid, 0, GRID_WIDTH * sizeof(int));
-
     for (int i = 0; i < GRID_WIDTH; i++)
     {
         main_grid[i] = 1;
@@ -96,58 +101,53 @@ int main(int argc, char **argv)
 
     int kernel[KERNEL_SIZE];
     memset(kernel, 0, KERNEL_SIZE * sizeof(int));
-
     for (int i = 0; i < KERNEL_SIZE; i++)
     {
         kernel[i] = 1;
     }
 
-    int *padded_grid = calloc((DIM + (num_pads * 2)) * (DIM + (num_pads * 2)), sizeof(int));
-    memcpy(&padded_grid[num_pads * (DIM + 2)], main_grid, GRID_WIDTH * sizeof(int));
-
-    int *new_grid = calloc(GRID_WIDTH, sizeof(int));
-
-    struct timeval start_time, end_time;
-    double elapsed_time;
-
-    gettimeofday(&start_time, NULL);
-
-    for (int iter = 0; iter < num_iterations; iter++)
+    for (iters = 0; iters < num_iterations; iters++)
     {
-        new_grid = check(padded_grid, DIM, DIM + (num_pads * 2), kernel, KERNEL_DIM);
+        int upper[DIM * num_pads];
+        int lower[DIM * num_pads];
 
-        // swap pointers to avoid copying values
-        int *tmp = padded_grid;
-        padded_grid = new_grid;
-        new_grid = tmp;
+        int *pad_row_upper;
+        int *pad_row_lower;
+
+        pad_row_upper = upper;
+        pad_row_lower = lower;
+
+        int start = 0;
+        int end = DIM - 1;
+        int nrows = end + 1 - start;
+
+        int sub_grid[DIM * (nrows + (2 * num_pads))];
+
+        memcpy(sub_grid, pad_row_upper, sizeof(int) * DIM * num_pads);
+        memcpy(&sub_grid[DIM * num_pads], &main_grid[DIM * start], sizeof(int) * DIM * nrows);
+        memcpy(&sub_grid[DIM * (nrows + num_pads)], pad_row_lower, sizeof(int) * DIM * num_pads);
+        int *changed_subgrid = check(sub_grid, nrows, DIM, kernel, KERNEL_DIM);
+
+        for (int i = 0; i < nrows * DIM; i++)
+        {
+            main_grid[i] = changed_subgrid[i];
+        }
+        // Output the updated grid state
+        // if ( ID == 0 ) {
+        // printf("\nConvolution Output: \n");
+        // for (int j = 0; j < GRID_WIDTH; j++)
+        // {
+        //     if (j % DIM == 0)
+        //     {
+        //         printf("\n");
+        //     }
+        //     printf("%d  ", main_grid[j]);
+        // }
+        // printf("\n");
+        // }
+
+        free(changed_subgrid);
     }
-
-    gettimeofday(&end_time, NULL);
-    elapsed_time = ((end_time.tv_sec - start_time.tv_sec) * 1000000u + end_time.tv_usec - start_time.tv_usec) / 1.e6;
-
-    printf("Convolution of size %dx%d, kernel of size %dx%d, %d iterations took %lf seconds\n", DIM, DIM, KERNEL_DIM, KERNEL_DIM, num_iterations, elapsed_time);
-
-    free(padded_grid);
-    free(new_grid);
 
     return 0;
 }
-
-/*
-DESCRIPTION:
-
-1. The necessary header files are included - stdio.h, stdlib.h, assert.h, string.h, sys/time.h
-2. The DEFAULT_ITERATIONS is defined as 1
-3. Two functions for performing the convolution are defined: conv_column() and conv(). These functions perform convolution operations on the provided sub-grid based on a given kernel.
-4. The check() function is defined. This function performs the convolution operation on the input sub-grid using the specified kernel and returns the resulting new grid.
-5. In the main function, command line arguments are parsed to determine the size of the grid, kernel, and number of iterations to run.
-6. The main grid is created and initialized to all 1's, while the kernel is created and initialized to all 1's.
-7. The padded grid is created and initialized by copying the main grid into the center of it, with padding added to the edges.
-8. A new grid is created to store the results of the convolution operation.
-9. A timer is started to track the elapsed time of the convolution operation.
-10. A loop runs for the specified number of iterations, calling the check() function to perform the convolution operation and storing the resulting new grid in the new_grid pointer.
-11. Pointers are swapped to avoid copying values.
-12. The timer is stopped and the elapsed time is printed.
-13. Memory allocated using calloc() is freed.
-14. The main function returns 0.
-*/

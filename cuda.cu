@@ -40,9 +40,10 @@ int *check_cuda(int *sub_grid, int nrows, int DIM, int *kernel, int kernel_dim, 
     cudaMalloc(&d_new_grid, nrows * nrows * sizeof(int));
 
     cudaMemcpy(d_sub_grid, sub_grid, (DIM + (kernel_dim - 1)) * (DIM + (kernel_dim - 1)) * sizeof(int), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_kernel, kernel, kernel_dim * kernel_dim * sizeof(int), cudaMemcpyHostToDevice);j
+    cudaMemcpy(d_kernel, kernel, kernel_dim * kernel_dim * sizeof(int), cudaMemcpyHostToDevice);
+    j
 
-    dim3 block_size(9, 9);
+        dim3 block_size(9, 9);
     dim3 num_blocks((nrows + block_size.x - 1) / block_size.x, (nrows + block_size.y - 1) / block_size.y);
 
     cudaEvent_t start, stop;
@@ -59,11 +60,11 @@ int *check_cuda(int *sub_grid, int nrows, int DIM, int *kernel, int kernel_dim, 
         d_new_grid = tmp;
     }
 
-   cudaEventRecord(stop);
+    cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     float elapsed_time;
     cudaEventElapsedTime(&elapsed_time, start, stop);
-    printf("Execution time: %f s\n", elapsed_time/100);
+    printf("Execution time: %f s\n", elapsed_time / 100);
 
     cudaMemcpy(new_grid, d_sub_grid + ((kernel_dim - 1) / 2) * (DIM + (kernel_dim - 1)) + ((kernel_dim - 1) / 2), nrows * nrows * sizeof(int), cudaMemcpyDeviceToHost);
     cudaFree(d_sub_grid);
@@ -101,12 +102,10 @@ int main(int argc, char **argv)
             }
         }
     }
-
     for (int i = 0; i < kernel_dim * kernel_dim; i++)
     {
         kernel[i] = rand() % 10;
     }
-
     int *result = check_cuda(sub_grid, DIM, DIM + (kernel_dim - 1), kernel, kernel_dim, num_iterations);
 
     // for (int i = 0; i < DIM; i++)
