@@ -9,6 +9,9 @@
 #include <sys/time.h>
 #include "mpi.h"
 
+#define KERNEL_DIM 5
+#define KERNEL_SIZE 25
+
 #define DEFAULT_ITERATIONS 1
 
 // documentation: http://mpitutorial.com/tutorials/mpi-send-and-receive/
@@ -82,19 +85,15 @@ int main(int argc, char **argv)
   int num_iterations;
   int DIM;
   int GRID_WIDTH;
-  int KERNEL_DIM;
-  int KERNEL_SIZE;
 
   num_iterations = DEFAULT_ITERATIONS;
-  if (argc >= 3)
+  if (argc >= 2)
   {
     DIM = atoi(argv[1]);
     GRID_WIDTH = DIM * DIM;
-    KERNEL_DIM = atoi(argv[2]);
-    KERNEL_SIZE = KERNEL_DIM * KERNEL_DIM;
-    if (argc == 4)
+    if (argc == 3)
     {
-      num_iterations = atoi(argv[3]);
+      num_iterations = atoi(argv[2]);
     }
   }
   else
@@ -112,12 +111,12 @@ int main(int argc, char **argv)
 
   int num_pads = (KERNEL_DIM - 1) / 2;
 
-  int kernel[KERNEL_SIZE];
-  memset(kernel, 0, KERNEL_SIZE * sizeof(int));
-  for (int i = 0; i < KERNEL_SIZE; i++)
-  {
-    kernel[i] = 1;
-  }
+  // int kernel[KERNEL_SIZE];
+  // memset(kernel, 0, KERNEL_SIZE * sizeof(int));
+  // for (int i = 0; i < KERNEL_SIZE; i++)
+  // {
+  int kernel[KERNEL_SIZE] = {1, 4, 7, 4, 1, 4, 16, 26, 16, 4, 7, 26, 41, 26, 7, 4, 16, 26, 16, 4, 1, 4, 7, 4, 1};
+  // }
   // Messaging variables
   MPI_Status status;
 

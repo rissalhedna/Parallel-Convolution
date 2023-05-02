@@ -7,6 +7,9 @@
 
 #define DEFAULT_ITERATIONS 1
 
+#define KERNEL_DIM 5
+#define KERNEL_SIZE 25
+
 int conv_column(int *sub_grid, int i, int nrows, int DIM, int *kernel, int kernel_dim)
 {
     int counter = 0;
@@ -46,16 +49,14 @@ int main(int argc, char **argv)
     int num_iterations = DEFAULT_ITERATIONS;
     int DIM = 0, GRID_WIDTH = 0, KERNEL_DIM = 0, KERNEL_SIZE = 0;
 
-    if (argc >= 3)
+    if (argc >= 2)
     {
         DIM = atoi(argv[1]);
         GRID_WIDTH = DIM * DIM;
-        KERNEL_DIM = atoi(argv[2]);
-        KERNEL_SIZE = KERNEL_DIM * KERNEL_DIM;
 
-        if (argc == 4)
+        if (argc == 3)
         {
-            num_iterations = atoi(argv[3]);
+            num_iterations = atoi(argv[2]);
         }
     }
     else
