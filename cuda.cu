@@ -7,28 +7,43 @@
 #include <cuda_runtime.h>
 
 #define DEFAULT_ITERATIONS 1
+#define TILE_WIDTH 6
 
 __global__ void convolve_cuda(int *sub_grid, int *new_grid, int nrows, int DIM, int *kernel, int kernel_dim)
 {
     int num_pads = (kernel_dim - 1) / 2;
-    int row = blockIdx.x * blockDim.x + threadIdx.x;
-    int col = blockIdx.y * blockDim.y + threadIdx.y;
-    int i = row * DIM + col;
+    int tx = threadIdx.x;
+    int ty = threadIdx.y;
+    int row = blockIdx.x * blockDim.x + tx;
+    int col = blockIdx.y * blockDim.y + ty;
+
+    __shared__ int tile[TILE_WIDTH][TILE_WIDTH];
 
     if (row < nrows && col < nrows)
+    {
+        tile[ty][tx] = sub_grid[row * DIM + col];
+    }
+    else
+    {
+        tile[ty][tx] = 0;
+    }
+    __syncthreads();
+
+    if (row < nrows && col < nrows && tx < TILE_WIDTH - num_pads && ty < TILE_WIDTH - num_pads)
     {
         int counter = 0;
 
         for (int j = 1; j < (num_pads + 1); j++)
         {
-            counter += sub_grid[i + j * DIM] * kernel[(((kernel_dim - 1) * (kernel_dim + 1)) / 2) + j * kernel_dim];
-            counter += sub_grid[i - j * DIM] * kernel[(((kernel_dim - 1) * (kernel_dim + 1)) / 2) - j * kernel_dim];
+            counter += tile[ty + j][tx] * kernel[(((kernel_dim - 1) * (kernel_dim + 1)) / 2) + j * kernel_dim];
+            counter += tile[ty - j][tx] * kernel[(((kernel_dim - 1) * (kernel_dim + 1)) / 2) - j * kernel_dim];
         }
-        counter += sub_grid[i] * kernel[(((kernel_dim - 1) * (kernel_dim + 1)) / 2)];
+        counter += tile[ty][tx] * kernel[(((kernel_dim - 1) * (kernel_dim + 1)) / 2)];
 
         new_grid[row * nrows + col] = counter;
     }
 }
+
 
 int *check_cuda(int *sub_grid, int nrows, int DIM, int *kernel, int kernel_dim, int num_iterations)
 {
@@ -41,9 +56,8 @@ int *check_cuda(int *sub_grid, int nrows, int DIM, int *kernel, int kernel_dim, 
 
     cudaMemcpy(d_sub_grid, sub_grid, (DIM + (kernel_dim - 1)) * (DIM + (kernel_dim - 1)) * sizeof(int), cudaMemcpyHostToDevice);
     cudaMemcpy(d_kernel, kernel, kernel_dim * kernel_dim * sizeof(int), cudaMemcpyHostToDevice);
-    j
 
-        dim3 block_size(9, 9);
+    dim3 block_size(TILE_WIDTH, TILE_WIDTH);
     dim3 num_blocks((nrows + block_size.x - 1) / block_size.x, (nrows + block_size.y - 1) / block_size.y);
 
     cudaEvent_t start, stop;
@@ -66,7 +80,7 @@ int *check_cuda(int *sub_grid, int nrows, int DIM, int *kernel, int kernel_dim, 
     cudaEventElapsedTime(&elapsed_time, start, stop);
     printf("Execution time: %f s\n", elapsed_time / 100);
 
-    cudaMemcpy(new_grid, d_sub_grid + ((kernel_dim - 1) / 2) * (DIM + (kernel_dim - 1)) + ((kernel_dim - 1) / 2), nrows * nrows * sizeof(int), cudaMemcpyDeviceToHost);
+    cudaMemcpy(new_grid, d_sub_grid +    ((kernel_dim - 1) / 2) * (DIM + (kernel_dim - 1)) + ((kernel_dim - 1) / 2), nrows * nrows * sizeof(int), cudaMemcpyDeviceToHost);
     cudaFree(d_sub_grid);
     cudaFree(d_kernel);
 
@@ -75,14 +89,14 @@ int *check_cuda(int *sub_grid, int nrows, int DIM, int *kernel, int kernel_dim, 
 
 int main(int argc, char **argv)
 {
-    if (argc < 4)
+    if (argc < 3)
     {
-        printf("Usage: ./convolve <DIM> <KERNEL_DIM> <NUM_ITERATIONS>\n");
+        printf("Usage: ./convolve <DIM> <NUM_ITERATIONS>\n");
         exit(1);
     }
     int DIM = atoi(argv[1]);
-    int kernel_dim = atoi(argv[2]);
-    int num_iterations = atoi(argv[3]);
+    int num_iterations = atoi(argv[2]);
+    int kernel_dim = 5;
     int *sub_grid = (int *)malloc((DIM + (kernel_dim - 1)) * (DIM + (kernel_dim - 1)) * sizeof(int));
     int *kernel = (int *)malloc(kernel_dim * kernel_dim * sizeof(int));
 
@@ -102,12 +116,12 @@ int main(int argc, char **argv)
             }
         }
     }
-    for (int i = 0; i < kernel_dim * kernel_dim; i++)
-    {
-        kernel[i] = rand() % 10;
-    }
-    int *result = check_cuda(sub_grid, DIM, DIM + (kernel_dim - 1), kernel, kernel_dim, num_iterations);
 
+
+    int temp[] = {1, 4, 7, 4, 1, 4, 16, 26, 16, 4, 7, 26, 41, 26, 7, 4, 16, 26, 16, 4, 1, 4, 7, 4, 1};
+    memcpy(kernel, temp, kernel_dim * kernel_dim * sizeof(int));
+
+    int *result = check_cuda(sub_grid, DIM, DIM + (kernel_dim - 1), kernel, kernel_dim, num_iterations);
     // for (int i = 0; i < DIM; i++)
     // {
     //     for (int j = 0; j < DIM; j++)
@@ -123,3 +137,4 @@ int main(int argc, char **argv)
 
     return 0;
 }
+

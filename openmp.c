@@ -13,7 +13,7 @@
 int conv_column(int *sub_grid, int i, int nrows, int DIM, int *kernel, int kernel_dim)
 {
     int counter = 0;
-    int num_pads = (kernel_dim - 1) / 2;
+    int num_pads = (ke rnel_dim - 1) / 2;
 
     for (int j = 1; j < (num_pads + 1); j++)
     {
