@@ -7,7 +7,7 @@
 #include <cuda_runtime.h>
 
 #define DEFAULT_ITERATIONS 1
-#define TILE_WIDTH 6
+#define TILE_WIDTH 16
 
 __global__ void convolve_cuda(int *sub_grid, int *new_grid, int nrows, int DIM, int *kernel, int kernel_dim)
 {
@@ -33,10 +33,13 @@ __global__ void convolve_cuda(int *sub_grid, int *new_grid, int nrows, int DIM, 
     {
         int counter = 0;
 
-        for (int j = 1; j < (num_pads + 1); j++)
+       for (int j = 1; j < (num_pads + 1); j++)
         {
             counter += tile[ty + j][tx] * kernel[(((kernel_dim - 1) * (kernel_dim + 1)) / 2) + j * kernel_dim];
             counter += tile[ty - j][tx] * kernel[(((kernel_dim - 1) * (kernel_dim + 1)) / 2) - j * kernel_dim];
+            counter += tile[ty][tx + j] * kernel[(((kernel_dim - 1) * (kernel_dim + 1)) / 2) + j];
+            counter += tile[ty][tx - j] * kernel[(((kernel_dim - 1) * (kernel_dim + 1)) / 2) - j];
+ 
         }
         counter += tile[ty][tx] * kernel[(((kernel_dim - 1) * (kernel_dim + 1)) / 2)];
 
@@ -78,7 +81,7 @@ int *check_cuda(int *sub_grid, int nrows, int DIM, int *kernel, int kernel_dim, 
     cudaEventSynchronize(stop);
     float elapsed_time;
     cudaEventElapsedTime(&elapsed_time, start, stop);
-    printf("Execution time: %f s\n", elapsed_time / 100);
+    printf("Execution time: %f s\n", elapsed_time / 1000);
 
     cudaMemcpy(new_grid, d_sub_grid +    ((kernel_dim - 1) / 2) * (DIM + (kernel_dim - 1)) + ((kernel_dim - 1) / 2), nrows * nrows * sizeof(int), cudaMemcpyDeviceToHost);
     cudaFree(d_sub_grid);
@@ -108,11 +111,11 @@ int main(int argc, char **argv)
         {
             if (i < (kernel_dim - 1) / 2 || i >= DIM + (kernel_dim - 1) - (kernel_dim - 1) / 2 || j < (kernel_dim - 1) / 2 || j >= DIM + (kernel_dim - 1) - (kernel_dim - 1) / 2)
             {
-                sub_grid[i * (DIM + (kernel_dim - 1)) + j] = 0;
+                sub_grid[i * (DIM + (kernel_dim - 1)) + j] = 1;
             }
             else
             {
-                sub_grid[i * (DIM + (kernel_dim - 1)) + j] = rand() % 100;
+                sub_grid[i * (DIM + (kernel_dim - 1)) + j] = 1;
             }
         }
     }
@@ -122,14 +125,14 @@ int main(int argc, char **argv)
     memcpy(kernel, temp, kernel_dim * kernel_dim * sizeof(int));
 
     int *result = check_cuda(sub_grid, DIM, DIM + (kernel_dim - 1), kernel, kernel_dim, num_iterations);
-    // for (int i = 0; i < DIM; i++)
-    // {
-    //     for (int j = 0; j < DIM; j++)
-    //     {
-    //         printf("%d ", result[i * DIM + j]);
-    //     }
-    //     printf("\n");
-    // }
+    for (int i = 0; i < DIM; i++)
+    {
+        for (int j = 0; j < DIM; j++)
+        {
+            printf("%d ", result[i * DIM + j]);
+        }
+        printf("\n");
+    }
 
     free(sub_grid);
     free(kernel);
