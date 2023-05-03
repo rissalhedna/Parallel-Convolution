@@ -6,54 +6,84 @@
 #include <omp.h>
 
 #define DEFAULT_ITERATIONS 1
-
 #define KERNEL_DIM 5
 #define KERNEL_SIZE 25
+
+int conv_column(int *, int, int, int, int *, int);
+int conv(int *, int, int, int, int *, int);
+int *check(int *, int, int, int *, int);
 
 int conv_column(int *sub_grid, int i, int nrows, int DIM, int *kernel, int kernel_dim)
 {
     int counter = 0;
-    int num_pads = (ke rnel_dim - 1) / 2;
-
+    int num_pads = (kernel_dim - 1) / 2;
+    // #pragma omp parallel for
     for (int j = 1; j < (num_pads + 1); j++)
     {
-        counter += sub_grid[i + j * DIM] * kernel[(((kernel_dim - 1) * (kernel_dim + 1)) / 2) + j * kernel_dim];
-        counter += sub_grid[i - j * DIM] * kernel[(((kernel_dim - 1) * (kernel_dim + 1)) / 2) - j * kernel_dim];
+        counter = counter + sub_grid[i + j * DIM] * kernel[(((kernel_dim - 1) * (kernel_dim + 1)) / 2) + j * kernel_dim];
+        counter = counter + sub_grid[i - j * DIM] * kernel[(((kernel_dim - 1) * (kernel_dim + 1)) / 2) - j * kernel_dim];
     }
-    counter += sub_grid[i] * kernel[(((kernel_dim - 1) * (kernel_dim + 1)) / 2)];
+    counter = counter + sub_grid[i] * kernel[(((kernel_dim - 1) * (kernel_dim + 1)) / 2)];
 
     return counter;
 }
 
-void convolve_omp(int *sub_grid, int *new_grid, int nrows, int DIM, int *kernel, int kernel_dim)
+int conv(int *sub_grid, int i, int nrows, int DIM, int *kernel, int kernel_dim)
 {
+    int counter = 0;
     int num_pads = (kernel_dim - 1) / 2;
+    // convolve middle column
+    counter = counter + conv_column(sub_grid, i, nrows, DIM, kernel, kernel_dim);
 
-#pragma omp parallel for schedule(static)
-    for (int i = num_pads * DIM; i < (DIM * (num_pads + nrows)); i++)
+    // convolve left and right columns
+    // #pragma omp parallel for
+    for (int j = 1; j < (num_pads + 1); j++)
     {
-        new_grid[i - (num_pads * DIM)] = conv_column(sub_grid, i, nrows, DIM, kernel, kernel_dim);
+        // get last element of current row
+        int end = (((i / DIM) + 1) * DIM) - 1;
+        if (i + j - end <= 0)
+        { // if column is valid
+            counter = counter + conv_column(sub_grid, i + j, nrows, DIM, kernel, kernel_dim);
+        }
+        // get first element of current row
+        int first = (i / DIM) * DIM;
+        if (i - j - first >= 0)
+        {
+            counter = counter + conv_column(sub_grid, i - j, nrows, DIM, kernel, kernel_dim);
+        }
     }
+
+    return counter;
 }
 
-int *check_omp(int *sub_grid, int nrows, int DIM, int *kernel, int kernel_dim)
+int *check(int *sub_grid, int nrows, int DIM, int *kernel, int kernel_dim)
 {
+    int val;
+    int num_pads = (kernel_dim - 1) / 2;
     int *new_grid = calloc(DIM * nrows, sizeof(int));
-
-    convolve_omp(sub_grid, new_grid, nrows, DIM, kernel, kernel_dim);
+    
+    #pragma omp parallel for schedule(static)
+    for (int i = (num_pads * DIM); i < (DIM * (num_pads + nrows)); i++) {
+        val = conv(sub_grid, i, nrows, DIM, kernel, kernel_dim);
+        new_grid[i - (num_pads * DIM)] = val;
+    }
 
     return new_grid;
 }
+
 int main(int argc, char **argv)
 {
-    int num_iterations = DEFAULT_ITERATIONS;
-    int DIM = 0, GRID_WIDTH = 0, KERNEL_DIM = 0, KERNEL_SIZE = 0;
+    omp_set_num_threads(16);
+    int iters = 0;
+    int num_iterations;
+    int DIM;
+    int GRID_WIDTH;
 
+    num_iterations = DEFAULT_ITERATIONS;
     if (argc >= 2)
     {
         DIM = atoi(argv[1]);
         GRID_WIDTH = DIM * DIM;
-
         if (argc == 3)
         {
             num_iterations = atoi(argv[2]);
@@ -61,52 +91,66 @@ int main(int argc, char **argv)
     }
     else
     {
-        printf("Invalid command line arguments\n");
+        printf("Invalid command line arguments");
         exit(-1);
     }
-
-    int *main_grid = calloc(GRID_WIDTH, sizeof(int));
-    assert(main_grid != NULL);
-    memset(main_grid, 1, GRID_WIDTH * sizeof(int));
+    int main_grid[GRID_WIDTH];
+    memset(main_grid, 0, GRID_WIDTH * sizeof(int));
+    for (int i = 0; i < GRID_WIDTH; i++)
+    {
+        main_grid[i] = 1;
+    }
 
     int num_pads = (KERNEL_DIM - 1) / 2;
 
-    int *kernel = calloc(KERNEL_SIZE, sizeof(int));
-    assert(kernel != NULL);
-    memset(kernel, 1, KERNEL_SIZE * sizeof(int));
+    // memset(kernel, 0, KERNEL_SIZE * sizeof(int));
+    // for (int i = 0; i < KERNEL_SIZE; i++)
+    // {
+    int kernel[KERNEL_SIZE] = {1, 4, 7, 4, 1, 4, 16, 26, 16, 4, 7, 26, 41, 26, 7, 4, 16, 26, 16, 4, 1, 4, 7, 4, 1};
+    // }
 
-    int *padded_grid = calloc((DIM + (num_pads * 2)) * (DIM + (num_pads * 2)), sizeof(int));
-    assert(padded_grid != NULL);
-    memcpy(&padded_grid[num_pads * (DIM + 2)], main_grid, GRID_WIDTH * sizeof(int));
-
-    int *new_grid = calloc(GRID_WIDTH, sizeof(int));
-    assert(new_grid != NULL);
-
-    struct timeval start_time, end_time;
-    double elapsed_time;
-
-    gettimeofday(&start_time, NULL);
-
-    omp_set_num_threads(4);
-
-    for (int iter = 0; iter < num_iterations; iter++)
+    for (iters = 0; iters < num_iterations; iters++)
     {
-        check_omp(padded_grid, DIM, DIM + (num_pads * 2), kernel, KERNEL_DIM);
-        // swap pointers to avoid copying values
-        int *tmp = padded_grid;
-        padded_grid = new_grid;
-        new_grid = tmp;
+        int upper[DIM * num_pads];
+        int lower[DIM * num_pads];
+
+        int *pad_row_upper;
+        int *pad_row_lower;
+
+        pad_row_upper = upper;
+        pad_row_lower = lower;
+
+        int start = 0;
+        int end = DIM - 1;
+        int nrows = end + 1 - start;
+
+        int sub_grid[DIM * (nrows + (2 * num_pads))];
+
+        memcpy(sub_grid, pad_row_upper, sizeof(int) * DIM * num_pads);
+        memcpy(&sub_grid[DIM * num_pads], &main_grid[DIM * start], sizeof(int) * DIM * nrows);
+        memcpy(&sub_grid[DIM * (nrows + num_pads)], pad_row_lower, sizeof(int) * DIM * num_pads);
+        int *changed_subgrid = check(sub_grid, nrows, DIM, kernel, KERNEL_DIM);
+
+        for (int i = 0; i < nrows * DIM; i++)
+        {
+            main_grid[i] = changed_subgrid[i];
+        }
+        // Output the updated grid state
+        // if ( ID == 0 ) {
+        printf("\nConvolution Output: \n");
+        for (int j = 0; j < GRID_WIDTH; j++)
+        {
+            if (j % DIM == 0)
+            {
+                printf("\n");
+            }
+            printf("%d  ", main_grid[j]);
+        }
+        printf("\n");
+        // }
+
+        free(changed_subgrid);
     }
-
-    gettimeofday(&end_time, NULL);
-    elapsed_time = ((end_time.tv_sec - start_time.tv_sec) * 1000000u + end_time.tv_usec - start_time.tv_usec) / 1.e6;
-
-    printf("Convolution of size %dx%d, kernel of size %dx%d, %d iterations took %lf seconds\n", DIM, DIM, KERNEL_DIM, KERNEL_DIM, num_iterations, elapsed_time);
-
-    free(padded_grid);
-    free(new_grid);
-    free(kernel);
-    free(main_grid);
 
     return 0;
 }
