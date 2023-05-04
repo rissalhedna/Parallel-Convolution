@@ -76,28 +76,26 @@ for (int i = 0; i < GRID_WIDTH; i++) {
     dim3 blockSize(TILE_SIZE, TILE_SIZE);
     dim3 gridSize((DIM + blockSize.x - 1) / blockSize.x, (DIM + blockSize.y - 1) / blockSize.y);
 
+    //  int *input_d = grid_d;
+    //int *output_d = result_d;
+
     for (int iter = 0; iter < num_iterations; iter++) {
         convolution<<<gridSize, blockSize>>>(grid_d, result_d, kernel_d, DIM);
-        cudaMemcpy(result, result_d, GRID_WIDTH * sizeof(int), cudaMemcpyDeviceToHost);
-
-       // Swap the grid and result pointers
-int *temp = main_grid;
-main_grid = result;
-result = temp;
-
-
-
-    cudaMemcpy(grid_d, main_grid, GRID_WIDTH * sizeof(int), cudaMemcpyHostToDevice);
+        int *temp = grid_d;
+        grid_d = result_d;
+        result_d = temp;
 }
 
+cudaMemcpy(result, grid_d, GRID_WIDTH * sizeof(int), cudaMemcpyDeviceToHost);
+
 printf("\nConvolution Output: \n");
-// for (int i = 0; i < GRID_WIDTH; i++) {
-//     if (i % DIM == 0) {
-//         printf("\n");
-//     }
-//     printf("%d  ", main_grid[i]);
-// }
-// printf("\n");
+for (int i = 0; i < GRID_WIDTH; i++) {
+    if (i % DIM == 0) {
+        printf("\n");
+    }
+    printf("%d  ", result[i]);
+}
+printf("\n");
 
 // Cleanup
 cudaFree(grid_d);
