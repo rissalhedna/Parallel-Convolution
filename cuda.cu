@@ -2,142 +2,109 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
-#include <sys/time.h>
-#include <time.h>
 #include <cuda_runtime.h>
 
 #define DEFAULT_ITERATIONS 1
-#define TILE_WIDTH 16
+#define KERNEL_DIM 5
+#define KERNEL_SIZE 25
+#define TILE_SIZE 2
 
-__global__ void convolve_cuda(int *sub_grid, int *new_grid, int nrows, int DIM, int *kernel, int kernel_dim)
-{
-    int num_pads = (kernel_dim - 1) / 2;
-    int tx = threadIdx.x;
-    int ty = threadIdx.y;
-    int row = blockIdx.x * blockDim.x + tx;
-    int col = blockIdx.y * blockDim.y + ty;
+__global__ void convolution(int *grid, int *result, int *kernel, int dim) {
+    int num_pads = (KERNEL_DIM - 1) / 2;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
 
-    __shared__ int tile[TILE_WIDTH][TILE_WIDTH];
+    int outputRow = row - num_pads;
+    int outputCol = col - num_pads;
 
-    if (row < nrows && col < nrows)
-    {
-        tile[ty][tx] = sub_grid[row * DIM + col];
-    }
-    else
-    {
-        tile[ty][tx] = 0;
-    }
-    __syncthreads();
+    int val = 0;
 
-    if (row < nrows && col < nrows && tx < TILE_WIDTH - num_pads && ty < TILE_WIDTH - num_pads)
-    {
-        int counter = 0;
-
-       for (int j = 1; j < (num_pads + 1); j++)
-        {
-            counter += tile[ty + j][tx] * kernel[(((kernel_dim - 1) * (kernel_dim + 1)) / 2) + j * kernel_dim];
-            counter += tile[ty - j][tx] * kernel[(((kernel_dim - 1) * (kernel_dim + 1)) / 2) - j * kernel_dim];
-            counter += tile[ty][tx + j] * kernel[(((kernel_dim - 1) * (kernel_dim + 1)) / 2) + j];
-            counter += tile[ty][tx - j] * kernel[(((kernel_dim - 1) * (kernel_dim + 1)) / 2) - j];
- 
-        }
-        counter += tile[ty][tx] * kernel[(((kernel_dim - 1) * (kernel_dim + 1)) / 2)];
-
-        new_grid[row * nrows + col] = counter;
-    }
-}
-
-
-int *check_cuda(int *sub_grid, int nrows, int DIM, int *kernel, int kernel_dim, int num_iterations)
-{
-    int *new_grid = (int *)malloc(nrows * nrows * sizeof(int));
-    int *d_sub_grid, *d_new_grid, *d_kernel;
-
-    cudaMalloc(&d_sub_grid, (DIM + (kernel_dim - 1)) * (DIM + (kernel_dim - 1)) * sizeof(int));
-    cudaMalloc(&d_kernel, kernel_dim * kernel_dim * sizeof(int));
-    cudaMalloc(&d_new_grid, nrows * nrows * sizeof(int));
-
-    cudaMemcpy(d_sub_grid, sub_grid, (DIM + (kernel_dim - 1)) * (DIM + (kernel_dim - 1)) * sizeof(int), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_kernel, kernel, kernel_dim * kernel_dim * sizeof(int), cudaMemcpyHostToDevice);
-
-    dim3 block_size(TILE_WIDTH, TILE_WIDTH);
-    dim3 num_blocks((nrows + block_size.x - 1) / block_size.x, (nrows + block_size.y - 1) / block_size.y);
-
-    cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
-    cudaEventRecord(start);
-
-    for (int iter = 0; iter < num_iterations; iter++)
-    {
-        convolve_cuda<<<num_blocks, block_size>>>(d_sub_grid, d_new_grid, nrows, DIM + (kernel_dim - 1), d_kernel, kernel_dim);
-
-        int *tmp = d_sub_grid;
-        d_sub_grid = d_new_grid;
-        d_new_grid = tmp;
-    }
-
-    cudaEventRecord(stop);
-    cudaEventSynchronize(stop);
-    float elapsed_time;
-    cudaEventElapsedTime(&elapsed_time, start, stop);
-    printf("Execution time: %f s\n", elapsed_time / 1000);
-
-    cudaMemcpy(new_grid, d_sub_grid +    ((kernel_dim - 1) / 2) * (DIM + (kernel_dim - 1)) + ((kernel_dim - 1) / 2), nrows * nrows * sizeof(int), cudaMemcpyDeviceToHost);
-    cudaFree(d_sub_grid);
-    cudaFree(d_kernel);
-
-    return new_grid;
-}
-
-int main(int argc, char **argv)
-{
-    if (argc < 3)
-    {
-        printf("Usage: ./convolve <DIM> <NUM_ITERATIONS>\n");
-        exit(1);
-    }
-    int DIM = atoi(argv[1]);
-    int num_iterations = atoi(argv[2]);
-    int kernel_dim = 5;
-    int *sub_grid = (int *)malloc((DIM + (kernel_dim - 1)) * (DIM + (kernel_dim - 1)) * sizeof(int));
-    int *kernel = (int *)malloc(kernel_dim * kernel_dim * sizeof(int));
-
-    srand(42);
-
-    for (int i = 0; i < DIM + (kernel_dim - 1); i++)
-    {
-        for (int j = 0; j < DIM + (kernel_dim - 1); j++)
-        {
-            if (i < (kernel_dim - 1) / 2 || i >= DIM + (kernel_dim - 1) - (kernel_dim - 1) / 2 || j < (kernel_dim - 1) / 2 || j >= DIM + (kernel_dim - 1) - (kernel_dim - 1) / 2)
-            {
-                sub_grid[i * (DIM + (kernel_dim - 1)) + j] = 1;
-            }
-            else
-            {
-                sub_grid[i * (DIM + (kernel_dim - 1)) + j] = 1;
+    for (int i = 0; i < KERNEL_DIM; ++i) {
+        for (int j = 0; j < KERNEL_DIM; ++j) {
+            int inputRow = outputRow + i;
+            int inputCol = outputCol + j;
+            
+            if (inputRow >= 0 && inputRow < dim && inputCol >= 0 && inputCol < dim) {
+                val += grid[inputRow * dim + inputCol] * kernel[i * KERNEL_DIM + j];
             }
         }
     }
 
-
-    int temp[] = {1, 4, 7, 4, 1, 4, 16, 26, 16, 4, 7, 26, 41, 26, 7, 4, 16, 26, 16, 4, 1, 4, 7, 4, 1};
-    memcpy(kernel, temp, kernel_dim * kernel_dim * sizeof(int));
-
-    int *result = check_cuda(sub_grid, DIM, DIM + (kernel_dim - 1), kernel, kernel_dim, num_iterations);
-    for (int i = 0; i < DIM; i++)
-    {
-        for (int j = 0; j < DIM; j++)
-        {
-            printf("%d ", result[i * DIM + j]);
-        }
-        printf("\n");
+    if (outputRow >= 0 && outputRow < dim && outputCol >= 0 && outputCol < dim) {
+        result[outputRow * dim + outputCol] = val;
     }
-
-    free(sub_grid);
-    free(kernel);
-    free(result);
-
-    return 0;
 }
 
+int main(int argc, char **argv) {
+    int num_iterations;
+    int DIM;
+    int GRID_WIDTH;
+
+    num_iterations = DEFAULT_ITERATIONS;
+    if (argc >= 2) {
+        DIM = atoi(argv[1]);
+        GRID_WIDTH = DIM * DIM;
+        if (argc == 3) {
+            num_iterations = atoi(argv[2]);
+        }
+    } else {
+        printf("Invalid command line arguments");
+        exit(-1);
+    }
+
+    int *main_grid = (int *)malloc(GRID_WIDTH * sizeof(int));
+    memset(main_grid, 0, GRID_WIDTH * sizeof(int));
+    // Initialize grid with a simple pattern
+memset(main_grid, 0, GRID_WIDTH * sizeof(int));
+for (int i = 0; i < GRID_WIDTH; i++) {
+        main_grid[i] = 1;
+    }
+
+
+    int kernel[KERNEL_SIZE] = {1, 4, 7, 4, 1, 4, 16, 26, 16, 4, 7, 26, 41, 26, 7, 4, 16, 26, 16, 4, 1, 4, 7, 4, 1};
+
+    int *grid_d, *result_d, *kernel_d;
+    int *result = (int *)malloc(GRID_WIDTH * sizeof(int));
+
+    cudaMalloc((void **)&grid_d, GRID_WIDTH * sizeof(int));
+    cudaMalloc((void **)&result_d, GRID_WIDTH * sizeof(int));
+    cudaMalloc((void **)&kernel_d, KERNEL_SIZE * sizeof(int));
+
+    cudaMemcpy(grid_d, main_grid, GRID_WIDTH * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(kernel_d, kernel, KERNEL_SIZE * sizeof(int), cudaMemcpyHostToDevice);
+
+    dim3 blockSize(TILE_SIZE, TILE_SIZE);
+    dim3 gridSize((DIM + blockSize.x - 1) / blockSize.x, (DIM + blockSize.y - 1) / blockSize.y);
+
+    for (int iter = 0; iter < num_iterations; iter++) {
+        convolution<<<gridSize, blockSize>>>(grid_d, result_d, kernel_d, DIM);
+        cudaMemcpy(result, result_d, GRID_WIDTH * sizeof(int), cudaMemcpyDeviceToHost);
+
+       // Swap the grid and result pointers
+int *temp = main_grid;
+main_grid = result;
+result = temp;
+
+
+
+    cudaMemcpy(grid_d, main_grid, GRID_WIDTH * sizeof(int), cudaMemcpyHostToDevice);
+}
+
+printf("\nConvolution Output: \n");
+// for (int i = 0; i < GRID_WIDTH; i++) {
+//     if (i % DIM == 0) {
+//         printf("\n");
+//     }
+//     printf("%d  ", main_grid[i]);
+// }
+// printf("\n");
+
+// Cleanup
+cudaFree(grid_d);
+cudaFree(result_d);
+cudaFree(kernel_d);
+free(main_grid);
+free(result);
+
+return 0;
+}
